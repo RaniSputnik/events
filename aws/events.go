@@ -37,7 +37,11 @@ func (s *service) Get(ctx context.Context, eventName string) (res *events.Event,
 	if err != nil || output == nil || len(output.Rules) == 0 {
 		return
 	}
-	rulesForEvent := applyRuleFilter(eventNamedFilter(s.namespace, eventName), output.Rules)
+	event := Event{
+		Source:     s.namespace,
+		DetailType: eventName,
+	}
+	rulesForEvent := applyRuleFilter(eventMatchFilter(event), output.Rules)
 
 	subscribers := []string{}
 	for _, rule := range rulesForEvent {
@@ -80,39 +84,16 @@ func applyRuleFilter(f ruleFilter, rules []*cloudwatchevents.Rule) []*cloudwatch
 	return results
 }
 
-type eventPattern struct {
-	Source     []string `json:"source"`
-	Account    []string `json:"account"`
-	DetailType []string `json:"detail-type"`
-}
-
-func eventNamedFilter(namespace string, name string) ruleFilter {
+func eventMatchFilter(event Event) ruleFilter {
 	return func(r *cloudwatchevents.Rule) bool {
 		if r.EventPattern == nil {
-			return false
+			return false // TODO: Does a nil pattern mean no match? Or match everything?
 		}
 		pattern := []byte(aws.StringValue(r.EventPattern))
-		var decoded eventPattern
+		var decoded EventPattern
 		if err := json.Unmarshal(pattern, &decoded); err != nil {
 			return false
 		}
-		if len(decoded.Source) > 0 {
-			found := false
-			for _, source := range decoded.Source {
-				if source == namespace {
-					found = true
-					break
-				}
-			}
-			if !found {
-				return false
-			}
-		}
-		for _, receiveEvent := range decoded.DetailType {
-			if receiveEvent == name {
-				return true
-			}
-		}
-		return false
+		return EventMatches(event, decoded)
 	}
 }
