@@ -33,3 +33,13 @@ func TestARNToGID(t *testing.T) {
 		})
 	}
 }
+
+func TestARNToGIDRespectsAliases(t *testing.T) {
+	given := "arn:aws:lambda:eu-west-1:123456789012:function:someFunction"
+	expected := events.GID{AccountID: "something", Kind: events.KindFunction, ID: "someFunction"}
+	aws.Aliases(map[string]string{
+		"123456789012": "something",
+	})
+	assert.Equal(t, expected, aws.ARNToGID(given))
+
+}

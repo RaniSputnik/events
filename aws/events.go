@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudwatchevents"
+	"github.com/aws/aws-sdk-go/service/sts"
 )
 
 const maxRulesPageSize = 100
@@ -17,18 +18,28 @@ const maxTargetsPageSize = 100
 type service struct {
 	namespace string
 	client    *cloudwatchevents.CloudWatchEvents
+	sts       *sts.STS
 }
 
 func Events(namespace string) events.Service {
 	s := session.Must(session.NewSession())
 	client := cloudwatchevents.New(s)
+	sts := sts.New(s)
 	return &service{
 		namespace: namespace,
 		client:    client,
+		sts:       sts,
 	}
 }
 
 func (s *service) Get(ctx context.Context, eventName string) (res *events.Event, err error) {
+	var caller *sts.GetCallerIdentityOutput
+	caller, err = s.sts.GetCallerIdentity(&sts.GetCallerIdentityInput{})
+	currentAccountID := aws.StringValue(caller.Account)
+	if alias, hasAlias := aliases[currentAccountID]; hasAlias {
+		currentAccountID = alias
+	}
+
 	params := cloudwatchevents.ListRulesInput{
 		Limit: aws.Int64(maxRulesPageSize),
 	}
@@ -43,7 +54,7 @@ func (s *service) Get(ctx context.Context, eventName string) (res *events.Event,
 	}
 	rulesForEvent := applyRuleFilter(eventMatchFilter(event), output.Rules)
 
-	subscribers := []string{}
+	subscribers := []events.GID{}
 	for _, rule := range rulesForEvent {
 		// TODO: run this in parallel
 		input := cloudwatchevents.ListTargetsByRuleInput{
@@ -61,14 +72,25 @@ func (s *service) Get(ctx context.Context, eventName string) (res *events.Event,
 			if gid.Kind == events.KindNamespace && gid.ID == "default" {
 				gid.ID = s.namespace
 			}
-			subscribers = append(subscribers, gid.String())
+			subscribers = append(subscribers, gid)
 		}
 	}
 
 	return &events.Event{
+		ID: eventName,
+		GID: events.GID{
+			AccountID: currentAccountID,
+			Kind:      events.KindSchema,
+			ID:        eventName,
+		},
 		Name:        eventName,
 		Subscribers: subscribers,
-		Publishers:  []string{},
+		Publishers: []events.EventPublisher{
+			{
+				Function:  events.GID{AccountID: currentAccountID, ID: "todo", Kind: events.KindFunction},
+				Namespace: events.GID{AccountID: currentAccountID, ID: "todo", Kind: events.KindNamespace},
+			},
+		},
 	}, nil
 }
 
