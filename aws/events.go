@@ -40,19 +40,29 @@ func (s *service) Get(ctx context.Context, eventName string) (res *events.Event,
 		currentAccountID = alias
 	}
 
-	params := cloudwatchevents.ListRulesInput{
-		Limit: aws.Int64(maxRulesPageSize),
+	errc := make(chan error, 1)
+	rules := s.rulesStream(ctx, errc)
+	results := []*cloudwatchevents.Rule{}
+
+loop:
+	for {
+		select {
+		case rule := <-rules:
+			if rule == nil {
+				break loop // Results channel closed, we are done
+			}
+			results = append(results, rule)
+		case err = <-errc:
+			// If we receive any errors, return the first one and a nil event
+			return nil, err
+		}
 	}
-	var output *cloudwatchevents.ListRulesOutput
-	output, err = s.client.ListRules(&params)
-	if err != nil || output == nil || len(output.Rules) == 0 {
-		return
-	}
+
 	event := Event{
 		Source:     s.namespace,
 		DetailType: eventName,
 	}
-	rulesForEvent := applyRuleFilter(eventMatchFilter(event), output.Rules)
+	rulesForEvent := applyRuleFilter(eventMatchFilter(event), results)
 
 	subscribers := []events.GID{}
 	for _, rule := range rulesForEvent {
@@ -65,6 +75,7 @@ func (s *service) Get(ctx context.Context, eventName string) (res *events.Event,
 		if err != nil {
 			return nil, err
 		}
+
 		for _, target := range desc.Targets {
 			arn := aws.StringValue(target.Arn)
 			gid := ARNToGID(arn)
