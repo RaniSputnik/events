@@ -40,32 +40,39 @@ func (s *service) Get(ctx context.Context, eventName string) (res *events.Event,
 		currentAccountID = alias
 	}
 
-	errc := make(chan error, 1)
-	rules := s.rulesStream(ctx, errc)
-	results := []*cloudwatchevents.Rule{}
+	// The event that we are expecting to be published
+	// from Lambda functions - with correct source and
+	// detail type (AKA namespace & event name)
+	event := Event{
+		Source:     s.namespace,
+		DetailType: eventName,
+	}
 
+	// Create an error channel for API errors from AWS
+	errc := make(chan error, 1)
+
+	// Create the pipeline for rules processing
+	allRulesc := s.rulesStream(ctx, errc)
+	matchingRulesc := s.filterRulesStream(ctx, allRulesc, eventMatchFilter(event))
+
+	// Run the pipeline until we've read all rules
+	rules := []*cloudwatchevents.Rule{}
 loop:
 	for {
 		select {
-		case rule := <-rules:
+		case rule := <-matchingRulesc:
 			if rule == nil {
 				break loop // Results channel closed, we are done
 			}
-			results = append(results, rule)
+			rules = append(rules, rule)
 		case err = <-errc:
 			// If we receive any errors, return the first one and a nil event
 			return nil, err
 		}
 	}
 
-	event := Event{
-		Source:     s.namespace,
-		DetailType: eventName,
-	}
-	rulesForEvent := applyRuleFilter(eventMatchFilter(event), results)
-
 	subscribers := []events.GID{}
-	for _, rule := range rulesForEvent {
+	for _, rule := range rules {
 		// TODO: run this in parallel
 		input := cloudwatchevents.ListTargetsByRuleInput{
 			Rule:  rule.Name,
