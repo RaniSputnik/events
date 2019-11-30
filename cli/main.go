@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/RaniSputnik/events/aws"
@@ -13,7 +14,12 @@ import (
 func main() {
 	namespace := flag.String("namespace", "", "The namespace to query for events")
 	eventName := flag.String("event", "", "The name of the event you want to query")
+	verbose := flag.Bool("v", false, "Verbose mode, optionally prints debug logs")
 	flag.Parse()
+
+	if *verbose {
+		aws.Debugf = log.Printf // Print debug logs to the console
+	}
 
 	if *namespace == "" {
 		fmt.Println("Missing required argument 'namespace'")

@@ -3,14 +3,14 @@ package aws
 import (
 	"context"
 
-	"encoding/json"
-
 	"github.com/RaniSputnik/events"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudwatchevents"
 	"github.com/aws/aws-sdk-go/service/sts"
 )
+
+var Debugf = func(format string, v ...interface{}) { /* No op */ }
 
 const maxRulesPageSize = 100
 const maxTargetsPageSize = 100
@@ -40,60 +40,12 @@ func (s *service) Get(ctx context.Context, eventName string) (res *events.Event,
 		currentAccountID = alias
 	}
 
-	// The event that we are expecting to be published
-	// from Lambda functions - with correct source and
-	// detail type (AKA namespace & event name)
-	event := Event{
-		Source:     s.namespace,
-		DetailType: eventName,
+	var subscribers []events.GID
+	if subscribers, err = s.getAllSubscribers(ctx, eventName); err != nil {
+		return
 	}
 
-	// Create an error channel for API errors from AWS
-	errc := make(chan error, 1)
-
-	// Create the pipeline for rules processing
-	allRulesc := s.rulesStream(ctx, errc)
-	matchingRulesc := s.filterRulesStream(ctx, allRulesc, eventMatchFilter(event))
-
-	// Run the pipeline until we've read all rules
-	rules := []*cloudwatchevents.Rule{}
-loop:
-	for {
-		select {
-		case rule := <-matchingRulesc:
-			if rule == nil {
-				break loop // Results channel closed, we are done
-			}
-			rules = append(rules, rule)
-		case err = <-errc:
-			// If we receive any errors, return the first one and a nil event
-			return nil, err
-		}
-	}
-
-	subscribers := []events.GID{}
-	for _, rule := range rules {
-		// TODO: run this in parallel
-		input := cloudwatchevents.ListTargetsByRuleInput{
-			Rule:  rule.Name,
-			Limit: aws.Int64(maxTargetsPageSize),
-		}
-		desc, err := s.client.ListTargetsByRule(&input)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, target := range desc.Targets {
-			arn := aws.StringValue(target.Arn)
-			gid := ARNToGID(arn)
-			// Special case to ensure we set the namespace GID correctly
-			if gid.Kind == events.KindNamespace && gid.ID == "default" {
-				gid.ID = s.namespace
-			}
-			subscribers = append(subscribers, gid)
-		}
-	}
-
+	// Create the resulting event
 	return &events.Event{
 		ID: eventName,
 		GID: events.GID{
@@ -110,30 +62,4 @@ loop:
 			},
 		},
 	}, nil
-}
-
-type ruleFilter func(*cloudwatchevents.Rule) bool
-
-func applyRuleFilter(f ruleFilter, rules []*cloudwatchevents.Rule) []*cloudwatchevents.Rule {
-	results := make([]*cloudwatchevents.Rule, 0, len(rules))
-	for _, rule := range rules {
-		if f(rule) {
-			results = append(results, rule)
-		}
-	}
-	return results
-}
-
-func eventMatchFilter(event Event) ruleFilter {
-	return func(r *cloudwatchevents.Rule) bool {
-		if r.EventPattern == nil {
-			return false // TODO: Does a nil pattern mean no match? Or match everything?
-		}
-		pattern := []byte(aws.StringValue(r.EventPattern))
-		var decoded EventPattern
-		if err := json.Unmarshal(pattern, &decoded); err != nil {
-			return false
-		}
-		return EventMatches(event, decoded)
-	}
 }
