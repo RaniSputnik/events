@@ -1,0 +1,35 @@
+interface Resource {
+  id: ID!
+  name: String!
+  description: String!
+  tags: [Tag!]!
+  url: String!
+}
+
+type Tag {
+  name: String!
+  value: String!
+}
+
+type Event implements Resource {
+  id: ID!
+  name: String!
+  description: String!
+  tags: [Tag!]!
+  url: String!
+
+  publisher: Function!
+  subscribers: [Function!]!
+}
+
+type Function implements Resource {
+  id: ID!
+  name: String!
+  description: String!
+  tags: [Tag!]!
+  url: String!
+}
+
+type Query {
+  event(id: String!): Event
+}
