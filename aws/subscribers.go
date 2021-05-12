@@ -6,7 +6,7 @@ import (
 
 	"github.com/RaniSputnik/events"
 	"github.com/aws/aws-sdk-go/aws"
-	cw "github.com/aws/aws-sdk-go/service/cloudwatchevents"
+	eb "github.com/aws/aws-sdk-go/service/eventbridge"
 )
 
 // getAllSubscribers fetches the GIDs of all of the infrastructure
@@ -64,9 +64,9 @@ func (s *service) getAllSubscribers(ctx context.Context, eventName string) ([]ev
 	}
 }
 
-func (s *service) rulesStream(ctx context.Context, errc chan<- error) <-chan *cw.Rule {
+func (s *service) rulesStream(ctx context.Context, errc chan<- error) <-chan *eb.Rule {
 	pageSize := 10
-	out := make(chan *cw.Rule, pageSize)
+	out := make(chan *eb.Rule, pageSize)
 
 	go func() {
 		// Deferring ensures that whenever we exit this
@@ -75,17 +75,17 @@ func (s *service) rulesStream(ctx context.Context, errc chan<- error) <-chan *cw
 
 		var nextToken *string
 		for {
-			// Fetch CloudWatch rules using the AWS SDK
-			params := cw.ListRulesInput{
+			// Fetch EventBridge rules using the AWS SDK
+			params := eb.ListRulesInput{
 				Limit:     aws.Int64(int64(pageSize)),
 				NextToken: nextToken,
 			}
-			Debugf("cloudwatchevents.ListRules: %+v\n", params)
+			Debugf("eventbridge.ListRules: %+v\n", params)
 			output, err := s.client.ListRules(&params)
 			// Return an error on the error channel if
 			// there was one, then abandon further execution
 			if err != nil {
-				Debugf("cloudwatchevents.ListRules failed: %+v", err)
+				Debugf("eventbridge.ListRules failed: %+v", err)
 				errc <- ctx.Err()
 				return
 			}
@@ -118,8 +118,8 @@ func (s *service) rulesStream(ctx context.Context, errc chan<- error) <-chan *cw
 // rule filter.
 // The rule filter should return false to exclude a given rule from
 // being sent to the output stream.
-func (s *service) filterRulesStream(ctx context.Context, in <-chan *cw.Rule, allow ruleFilter) <-chan *cw.Rule {
-	out := make(chan *cw.Rule)
+func (s *service) filterRulesStream(ctx context.Context, in <-chan *eb.Rule, allow ruleFilter) <-chan *eb.Rule {
+	out := make(chan *eb.Rule)
 	go func() {
 		defer close(out)
 		for rule := range in {
@@ -139,20 +139,20 @@ func (s *service) filterRulesStream(ctx context.Context, in <-chan *cw.Rule, all
 	return out
 }
 
-func (s *service) targetsStream(ctx context.Context, in <-chan *cw.Rule, errc chan<- error) <-chan *cw.Target {
-	out := make(chan *cw.Target, 10) // TODO: How big of a buffer to use?
+func (s *service) targetsStream(ctx context.Context, in <-chan *eb.Rule, errc chan<- error) <-chan *eb.Target {
+	out := make(chan *eb.Target, 10) // TODO: How big of a buffer to use?
 	go func() {
 		defer close(out)
 		for rule := range in {
-			input := cw.ListTargetsByRuleInput{
+			input := eb.ListTargetsByRuleInput{
 				Rule: rule.Name,
 				// TODO: Instead, handle pagination here
 				Limit: aws.Int64(maxTargetsPageSize),
 			}
-			Debugf("cloudwatchevents.ListTargetsByRule: %+v\n", input)
+			Debugf("eventbridge.ListTargetsByRule: %+v\n", input)
 			desc, err := s.client.ListTargetsByRule(&input)
 			if err != nil {
-				Debugf("cloudwatchevents.ListTargetsByRule failed: %+v", err)
+				Debugf("eventbridge.ListTargetsByRule failed: %+v", err)
 				errc <- err
 				return
 			}
@@ -165,7 +165,7 @@ func (s *service) targetsStream(ctx context.Context, in <-chan *cw.Rule, errc ch
 	return out
 }
 
-func (s *service) subscriberStream(ctx context.Context, in <-chan *cw.Target) <-chan events.GID {
+func (s *service) subscriberStream(ctx context.Context, in <-chan *eb.Target) <-chan events.GID {
 	out := make(chan events.GID)
 	go func() {
 		defer close(out)
@@ -182,10 +182,10 @@ func (s *service) subscriberStream(ctx context.Context, in <-chan *cw.Target) <-
 	return out
 }
 
-type ruleFilter func(*cw.Rule) bool
+type ruleFilter func(*eb.Rule) bool
 
 func ruleWouldMatchEventFilter(event Event) ruleFilter {
-	return func(r *cw.Rule) bool {
+	return func(r *eb.Rule) bool {
 		if r.EventPattern == nil {
 			return false // TODO: Does a nil pattern mean no match? Or match everything?
 		}
