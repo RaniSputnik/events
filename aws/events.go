@@ -6,7 +6,7 @@ import (
 	"github.com/RaniSputnik/events"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/cloudwatchevents"
+	"github.com/aws/aws-sdk-go/service/eventbridge"
 	"github.com/aws/aws-sdk-go/service/sts"
 )
 
@@ -17,13 +17,13 @@ const maxTargetsPageSize = 100
 
 type service struct {
 	namespace string
-	client    *cloudwatchevents.CloudWatchEvents
+	client    *eventbridge.EventBridge
 	sts       *sts.STS
 }
 
 func Events(namespace string) events.Service {
 	s := session.Must(session.NewSession())
-	client := cloudwatchevents.New(s)
+	client := eventbridge.New(s)
 	sts := sts.New(s)
 	return &service{
 		namespace: namespace,

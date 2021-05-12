@@ -1,6 +1,6 @@
 # Events
 
-A tool for abstracting CloudWatch events so that they can be used productively as business events.
+A tool for inspecting EventBridge configuration.
 
 To run the tool use:
 
@@ -10,7 +10,7 @@ go run ./cli/*.go --event=someEvent --namespace=com.example
 
 ## Use cases
 
-There are a number of goals for this tool that will help it become a productive and compelling offering for those using CloudWatch / EventBridge:
+There are a number of goals for this tool that will help it become a productive and compelling offering for those using EventBridge:
 
 - [x] Query all subscribers to a specific event (including other AWS accounts)
 - [ ] Query the publisher(s) of a specific event
@@ -23,7 +23,7 @@ There are a number of goals for this tool that will help it become a productive 
 
 ## Requirements
 
-This tool makes the following assumptions about your CloudWatch events:
+This tool makes the following assumptions about your EventBridge events:
 
 1. You use the `Source` field to denote the "namespace" under which the event is raised (eg. `com.mybusiness`).
 2. You use the `DetailType` field to denote the event name.
