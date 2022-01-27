@@ -5,7 +5,7 @@ A tool for inspecting EventBridge configuration.
 To run the tool use:
 
 ```
-go run ./cli/*.go --event=someEvent --namespace=com.example
+go run ./cli/*.go --event=someEvent --source=com.example
 ```
 
 ## Use cases
@@ -15,7 +15,7 @@ There are a number of goals for this tool that will help it become a productive 
 - [x] Query all subscribers to a specific event (including other AWS accounts)
 - [ ] Query the publisher(s) of a specific event
 - [ ] Validate events as they are in transit on the bus, publish metrics about event validation
-- [ ] Re-raise events in a new namespace to indicate they've passed validation
+- [ ] Re-raise events in a new source to indicate they've passed validation
 - [ ] Query the relationship between events & functions
 - [ ] Group events & functions by tag to create contextual diagrams
 - [ ] Query built-in AWS events and see the relationship between these events and business events
