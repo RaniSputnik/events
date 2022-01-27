@@ -40,25 +40,20 @@ func (s *service) Get(ctx context.Context, eventName string) (res *events.Event,
 		currentAccountID = alias
 	}
 
-	var subscribers []events.GID
+	var subscribers []events.ID
 	if subscribers, err = s.getAllSubscribers(ctx, eventName); err != nil {
 		return
 	}
 
 	// Create the resulting event
 	return &events.Event{
-		ID: eventName,
-		GID: events.GID{
-			AccountID: currentAccountID,
-			Kind:      events.KindSchema,
-			ID:        eventName,
-		},
+		ID: events.ID(eventName),
 		Name:        eventName,
 		Subscribers: subscribers,
 		Publishers: []events.EventPublisher{
 			{
-				Function:  events.GID{AccountID: currentAccountID, ID: "todo", Kind: events.KindFunction},
-				Namespace: events.GID{AccountID: currentAccountID, ID: "todo", Kind: events.KindNamespace},
+				Function:  events.ID("todo"),
+				Namespace: events.ID("todo"),
 			},
 		},
 	}, nil

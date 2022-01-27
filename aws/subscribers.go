@@ -12,7 +12,7 @@ import (
 // getAllSubscribers fetches the GIDs of all of the infrastructure
 // subscribing to an event in AWS with the given name. Returns either
 // the subscribers or an error.
-func (s *service) getAllSubscribers(ctx context.Context, eventName string) ([]events.GID, error) {
+func (s *service) getAllSubscribers(ctx context.Context, eventName string) ([]events.ID, error) {
 	// When this function exits, this context will be
 	// cancelled, stopping all routines in the pipeline
 	ctx, cancel := context.WithCancel(ctx)
@@ -43,16 +43,16 @@ func (s *service) getAllSubscribers(ctx context.Context, eventName string) ([]ev
 	targetsc := s.targetsStream(ctx, matchingRulesc, errc)
 	subc := s.subscriberStream(ctx, targetsc)
 
-	subscribers := []events.GID{}
+	subscribers := []events.ID{}
 	for {
 		select {
 		// Drain all of the subscribers from the pipeline.
-		case gid := <-subc:
-			if gid.ID == "" {
+		case arn := <-subc:
+			if arn == "" {
 				// There are no
 				return subscribers, nil
 			}
-			subscribers = append(subscribers, gid)
+			subscribers = append(subscribers, events.ID(arn))
 		// Alternatively, exit as soon as an error is encountered.
 		case err := <-errc:
 			return nil, err
@@ -165,18 +165,13 @@ func (s *service) targetsStream(ctx context.Context, in <-chan *eb.Rule, errc ch
 	return out
 }
 
-func (s *service) subscriberStream(ctx context.Context, in <-chan *eb.Target) <-chan events.GID {
-	out := make(chan events.GID)
+func (s *service) subscriberStream(ctx context.Context, in <-chan *eb.Target) <-chan ARN {
+	out := make(chan ARN)
 	go func() {
 		defer close(out)
 		for target := range in {
 			arn := aws.StringValue(target.Arn)
-			gid := ARNToGID(arn)
-			// Special case to ensure we set the namespace GID correctly
-			if gid.Kind == events.KindNamespace && gid.ID == "default" {
-				gid.ID = s.namespace
-			}
-			out <- gid
+			out <- ARN(arn)
 		}
 	}()
 	return out

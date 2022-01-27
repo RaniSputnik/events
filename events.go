@@ -4,17 +4,18 @@ import (
 	"context"
 )
 
+type ID string
+
 type EventPublisher struct {
-	Function  GID `json:"function"`
-	Namespace GID `json:"namespace"`
+	Function  ID `json:"function"`
+	Namespace ID `json:"namespace"`
 }
 
 type Event struct {
-	ID          string           `json:"id"`
-	GID         GID              `json:"gid"` // TODO: Derive this field from ID?
+	ID          ID           	 `json:"id"`
 	Name        string           `json:"name"`
 	Publishers  []EventPublisher `json:"publishers"`
-	Subscribers []GID            `json:"subscribers"`
+	Subscribers []ID             `json:"subscribers"`
 }
 
 type Service interface {
