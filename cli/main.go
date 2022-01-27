@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -37,10 +36,8 @@ func main() {
 	if err != nil {
 		exit(err)
 	}
-	encoder := json.NewEncoder(os.Stdout)
-	encoder.SetIndent("", "\t")
-	if err = encoder.Encode(ev); err != nil {
-		exit(err)
+	for _, sub := range ev.Subscribers {
+		fmt.Println(sub)
 	}
 }
 
